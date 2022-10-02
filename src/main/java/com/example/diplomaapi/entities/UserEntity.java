@@ -21,6 +21,12 @@ public class UserEntity {
     public UserEntity() {
     }
 
+    public UserEntity(String login, String password, String username) {
+        this.login = login;
+        this.password = password;
+        this.username = username;
+    }
+
     public Long getId() {
         return id;
     }

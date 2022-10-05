@@ -1,6 +1,7 @@
 package com.example.diplomaapi.services;
 
-import com.example.diplomaapi.constants.ServiceConstants;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import javax.mail.*;
@@ -15,7 +16,7 @@ public class EmailSenderService {
     private static final String USERNAME = "diplomapp2@gmail.com";
     private static final String PASSWORD = "knbpcgisgyerfxzt";
 
-    public HashMap<String, Object> sendEmail (
+    public ResponseEntity<String> sendEmail (
             String recipient,
             String title,
             String body) {
@@ -42,9 +43,7 @@ public class EmailSenderService {
             message.setText(body);
             Transport.send(message);
 
-            HashMap<String, Object> response = new HashMap<>();
-            response.put(ServiceConstants.STATUS, ServiceConstants.SUCCESS);
-            return response;
+            return new ResponseEntity<>(HttpStatus.OK);
         } catch (MessagingException e) {
             throw new RuntimeException(e);
         }

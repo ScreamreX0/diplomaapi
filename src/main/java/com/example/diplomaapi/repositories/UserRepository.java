@@ -10,9 +10,9 @@ import org.springframework.stereotype.Repository;
 @EnableJpaRepositories
 @Repository
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
-    @Query("FROM users WHERE login = :login")
-    UserEntity findUserByLogin(@Param("login") String login);
+    @Query("FROM users WHERE email = :email")
+    UserEntity findUserByEmail(@Param("email") String email);
 
     @Query("FROM users WHERE username = :username")
-    UserEntity findUserByUsername(@Param("username") String username);
+    UserEntity findUserByName(@Param("username") String username);
 }

@@ -1,151 +1,102 @@
 package com.example.diplomaapi.services;
 
-import com.example.diplomaapi.constants.CommonConstants;
+import com.example.diplomaapi.abstractions.IUserService;
 import com.example.diplomaapi.constants.EmailConstants;
-import com.example.diplomaapi.constants.ServiceConstants;
-import com.example.diplomaapi.entities.TokenEntity;
 import com.example.diplomaapi.entities.UserEntity;
-import com.example.diplomaapi.repositories.TokenRepository;
 import com.example.diplomaapi.repositories.UserRepository;
 import com.example.diplomaapi.utils.AuthUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import javax.mail.SendFailedException;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Service
-public class UserService {
+public class UserService implements IUserService {
     public UserService() {
     }
 
     @Autowired
     UserRepository userRepository;
-    @Autowired
-    TokenRepository tokenRepository;
 
     @Autowired
     EmailSenderService emailSenderService;
 
+    @Override
+    public ResponseEntity<UserEntity> emailIn(String email, String password) {
+        UserEntity userEntity = userRepository.findUserByEmail(email);
 
-    public List<UserEntity> getUsers() {
-        return userRepository.findAll();
+        if (userEntity == null || !password.equals(userEntity.getPassword())) {
+            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
+        }
+
+        userEntity.setToken(AuthUtils.generateToken());
+        userRepository.save(userEntity);
+        return new ResponseEntity<>(userEntity, HttpStatus.OK);
     }
 
-    public Map<String, Object> signInUser(String login, String password) {
-        final String WRONG_LOGIN = "Wrong login";
+    @Override
+    public ResponseEntity<UserEntity> usernameIn(String username, String password) {
+        UserEntity userEntity = userRepository.findUserByName(username);
 
-        UserEntity userEntity = userRepository.findUserByLogin(login);
+        if (userEntity == null || !password.equals(userEntity.getPassword())) {
+            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
+        }
 
-        Map<String, Object> response = new HashMap<>();
+        userEntity.setToken(AuthUtils.generateToken());
+        userRepository.save(userEntity);
+        return new ResponseEntity<>(userEntity, HttpStatus.OK);
+    }
 
+    @Override
+    public ResponseEntity<String> signUp(String email, String password, String username) {
+        if (userRepository.findUserByName(username) != null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        if (userRepository.findUserByEmail(email) != null) {
+            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+        }
+
+        userRepository.save(new UserEntity(email, password, username));
+        return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+    @Override
+    public ResponseEntity<String> sendConfirm(String email) {
+        UserEntity userEntity = userRepository.findUserByEmail(email);
         if (userEntity == null) {
-            response.put(ServiceConstants.STATUS, WRONG_LOGIN);
-            response.put(ServiceConstants.BODY, "");
-            return response;
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
-
-        if (password.equals(userEntity.getPassword())) {
-            response.put("status", ServiceConstants.SUCCESS);
-            response.put("body", userEntity);
-            return response;
-        }
-
-        response.put(ServiceConstants.STATUS, "wrong password");
-        response.put(ServiceConstants.BODY, "");
-        return response;
-    }
-
-    public Map<String, Object> signUpUser(String login, String password, String username) {
-        final String REPEATING_USERNAME = "Repeating username";
-        final String REPEATING_LOGIN = "Repeating login";
-
-
-        Map<String, Object> response = new HashMap<>();
-        response.put(ServiceConstants.STATUS, "");
-
-        if (userRepository.findUserByUsername(username) != null) {
-            response.put(ServiceConstants.STATUS, REPEATING_USERNAME);
-            return response;
-        }
-        if (userRepository.findUserByLogin(login) != null) {
-            response.put(ServiceConstants.STATUS, REPEATING_LOGIN);
-            return response;
-        }
-
-        userRepository.save(new UserEntity(login, password, username));
-
-        response.put(ServiceConstants.STATUS, ServiceConstants.SUCCESS);
-        return response;
-    }
-
-    public Map<String, Object> confirmEmail(
-            String recipientEmail
-    ) {
-        String wrongLogin = "Wrong login";
 
         String code = AuthUtils.generateCode(6);
-        HashMap<String, Object> response = new HashMap<>();
-
-        response.put(ServiceConstants.STATUS, "");
-
-        UserEntity user = userRepository.findUserByLogin(recipientEmail);
-        if (user == null) {
-            response.put(ServiceConstants.STATUS, wrongLogin);
-            return response;
-        }
-
-        emailSenderService.sendEmail(recipientEmail,
+        emailSenderService.sendEmail(
+                email,
                 EmailConstants.CONFIRM_CODE_TITLE,
-                EmailConstants.CONFIRM_CODE_BODY + code);
+                EmailConstants.CONFIRM_CODE_BODY + code
+        );
 
-        TokenEntity token = tokenRepository.findConfirmTokenByOwner(user.getId());
-        if (token == null) {
-            tokenRepository.save(new TokenEntity(
-                    code,
-                    CommonConstants.EMAIL_CONFIRMATION_TYPE,
-                    user.getId()));
-        } else {
-            token.setToken(code);
-            tokenRepository.save(token);
-        }
+        userEntity.setCode(code);
+        userRepository.save(userEntity);
 
-        response.put(ServiceConstants.STATUS, ServiceConstants.SUCCESS);
-        return response;
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 
-    public Map<String, Object> checkConfirmCode(
-            String recipientEmail,
-            String code
-    ) {
-        String userNotFoundError = "User not found";
-        String tokenNotFoundError = "Token not found";
-        String wrongTokenError = "Wrong token";
-
-        UserEntity user = userRepository.findUserByLogin(recipientEmail);
-
-        HashMap<String, Object> response = new HashMap<>();
-        response.put(ServiceConstants.STATUS, "");
-
-        if (user == null) {
-            response.put(ServiceConstants.STATUS, userNotFoundError);
-            return response;
+    @Override
+    public ResponseEntity<String> checkConfirm(String email, String code) {
+        UserEntity userEntity = userRepository.findUserByEmail(email);
+        if (userEntity == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
 
-        TokenEntity token = tokenRepository.findConfirmTokenByOwner(user.getId());
-        if (token == null) {
-            response.put(ServiceConstants.STATUS, tokenNotFoundError);
-            return response;
+        if (!userEntity.getCode().equals(code)) {
+            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
         }
 
-        if (code.equals(token.getToken())) {
-            response.put(ServiceConstants.STATUS, ServiceConstants.SUCCESS);
-        } else {
-            response.put(ServiceConstants.STATUS, wrongTokenError);
-        }
-        return response;
+        userEntity.setConfirmed(true);
+        userRepository.save(userEntity);
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 }
 
